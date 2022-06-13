@@ -1,0 +1,286 @@
+Le framework PHP Laravel fournit une API d’envoi de courrier électronique (courriel, mail ou e-mail) qui permet d’utiliser les services locaux ou cloud à travers des drivers (pilotes) pour :
+
+    SMTP
+    sendmail
+    Amazon SES
+    Mailgun
+    Postmark
+
+Le SMTP, « Simple Mail Transfer Protocol », est un protocole de communication utilisé pour transférer un courriel vers les serveurs de messagerie électronique.
+
+Nous voulons voir comment utiliser le serveur SMTP de Google pour envoyer un e-mail depuis une application Laravel en utilisant un compte Gmail (@gmail.com). Mais avant, commençons par voir comment créer le mot de passe d’application Google que nous allons utiliser pour le compte @gmail.
+
+#############   Créer un mot de passe d’application Google #############################
+
+Un mot de passe d'application Google est un code secret à 16 chiffres qu’un appareil ou une application n'appartenant pas à Google, tels que notre application Laravel, peut utiliser pour accéder aux informations et services d’un compte Google.
+
+Nous allons utiliser ce mot de passe d'application pour la configuration du driver SMTP dans le projet Laravel. 
+
+Voici la procédure pour obtenir un mot de passe d’application Google :
+
+    1 - Accédez au gestionnaire de votre compte Google à travers lien suivant : https://myaccount.google.com
+    2 - Au panneau de navigation à gauche, cliquez sur Sécurité
+    3 - Aux paramètres de sécurité, dans la zone Connexion à Google, cliquez sur Mots de passe des applications. Si cette option n’apparaît pas, assurez-vous d’avoir activé la Validation en deux étapes aux paramètres de sécurité.
+    4- Au bas de la page Mots de passe des applications, cliquez sur Sélectionnez une application, allez sur Autre (Nom personnalisé) pour entrer le nom de votre application
+    5- Cliquez sur Générer pour obtenir le mot de d’application à 16 chiffres
+
+#################     Envoyer un mail via SMTP dans un projet Laravel   ##################################
+
+Nous allons décortiquer en trois étapes la procédure d’envoi d’un mail dans un projet Laravel en utilisant le serveur SMTP de Google :
+
+==================  1. Configurer le SMTP
+
+Editons les informations MAIL_* au fichier .env à la racine du projet en renseignant les informations SMTP Google de la manière suivante :
+
+MAIL_MAILER=smtp             # le canal du transfert du mail (smtp, mailgun,.....)
+MAIL_HOST=smtp.gmail.com     #l’adresse du serveur SMTP
+MAIL_PORT=587                #Le port utilisé par le serveur SMTP Google
+MAIL_ENCRYPTION=tls          #Le cryptage (tls, ssl, ....)
+MAIL_AUTH_MODE=login
+MAIL_USERNAME=votre_email@gmail.com
+MAIL_PASSWORD=votre_mot_de_passe-a_application
+MAIL_FROM_ADDRESS= votre_email@gmail.com ou un autre (optionnel)
+MAIL_FROM_NAME="${APP_NAME}"
+
+
+Maintenant allons dans config/mail.php  et configurons smtp comme ceci :
+
+
+'smtp' => [
+        'transport' => 'smtp',
+        'host' => env('MAIL_HOST', 'smtp.mailgun.org'),
+        'port' => env('MAIL_PORT', 587),
+        'encryption' => env('MAIL_ENCRYPTION', 'tls'),
+        'username' => env('MAIL_USERNAME'),
+        'password' => env('MAIL_PASSWORD'),
+        'timeout' => null,
+        'auth_mode' => env('MAIL_AUTH_MODE'),
+    ],
+
+
+
+===================  2. Créer la classe Mailable
+
+Chaque mail dans un projet Laravel est représenté par une classe Mailable. Celle-ci fournit des méthodes pour configurer la présentation et l’envoie du mail.
+
+Pour générer la classe Mailable pour notre message, appelons-la « MessageGoogle », la commande artisan à exécuter dans la console (invite des commandes) est la suivante :
+
+php artisan make:mail MessageGoogle
+
+Cette commande crée le fichier app/Mail/MessageGoogle.php. Nous allons l'éditer en ajoutant les informations suivantes :
+
+    Une propriété publique $data pour passer les données à la vue (présentation de l’e-mail)
+    L’expéditeur from(…), le sujet du message subject(…), la vue à présenter view(…) dans la méthode build()
+
+Le code de la classe Mailable app/Mail/MessageGoogle.php : 
+
+
+class MessageGoogle extends Mailable
+{
+    use Queueable, SerializesModels;
+
+    public $data; // Données pour la vue
+
+    /**
+     * Create a new message instance.
+     *
+     * @return void
+     */
+
+    public function __construct($data)
+    {
+        $this->data = $data;
+    }
+
+    /**
+     * Build the message.
+     *
+     * @return $this
+     */
+    public function build()
+    {
+        $mailData = $this->data ;  // les données du mail à envoyer
+        return $this->subject("TEST APPLICATION GESCO") // Le sujet
+            ->view('emails.message-google',compact('mailData')); // La vue
+    }
+}
+
+
+La vue resources/views/emails/message-google.blade.php peut se présenter de la manière suivante :
+
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <title>Gession commerciale</title>
+</head>
+<body>
+<h1>{{ $mailData['titre'] }}</h1>
+<p>{{ $mailData['message'] }}</p>
+<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod
+    tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+    quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+    consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse
+    cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non
+    proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+<p>Merci</p>
+</body>
+</html>
+
+
+========================    3. Envoyer le mail
+
+Pour envoyer le courriel, nous allons définir deux routes « message » et un contrôleur « MessageController » :
+
+    La route « /message » (GET) pour présenter le formulaire HTML où saisir le message à envoyer
+    La route « /message » (POST) pour le traitement lorsque le formulaire est soumis, l’envoi du message
+    Le contrôleur « MessageController » pour gérer les actions de routes
+
+Pour générer le contrôleur, exécutons la commande artisan suivante :
+
+php artisan make:controller MessageController
+
+Cette commande crée le fichier app/Http/Controllers/MessageController.php. Nous allons l’éditer après avoir défini les routes.
+
+Définissons les routes « message » dans le fichier routes/web.php :
+
+Route::get("message", "MessageController@formMessageGoogle");
+Route::post("message", "MessageController@sendMessageGoogle")->name('send.message.google');
+
+Nous avons les actions suivantes que nous allons décrire au contrôleur MessageController.php. :
+
+    ** formMessageGoogle ** pour afficher la vue resources/views/emails/form-message.blade.php où présenter le formulaire
+    ** sendMessageGoogle ** pour valider le message saisi puis envoyer le mail aux utilisateurs
+
+Le formulaire sur la vue form-message.blade.php avec un champ <titre> et un champ <message> où saisir le message à envoyer peut se présenter de la manière suivante :
+
+@if (session()->has('text'))
+    <p>{{ session('text') }}</p>
+@endif
+
+<form url="{{ route('send.message.google') }}" method="POST" >
+    @csrf
+    <label for="titre">Titre</label>
+    <div>
+        <input type="text" id="titre" name="titre">
+        {{ $errors->first('titre', ":titre")}}
+    </div>
+
+    <label for="message" >Message</label>
+    <div>
+        <textarea name="message" id="message" rows="4" placeholder="Message à envoyer ici" ></textarea>
+        {{ $errors->first('message', ":message")}}
+    </div>
+    <button type="submit" >Envoyer</button>
+</form>
+
+
+Revenons au contrôleur app/Http/Controllers/MessageController.php :
+
+
+class MessageController extends Controller
+{
+    // Le formulaire du message
+    public function formMessageGoogle () {
+        return view("emails.form-message");
+    }
+
+    // Envoi du mail aux gens/employes
+    public function sendMessageGoogle (Request $request) {
+
+        #1. Validation de la requête
+        $this->validate($request, [ 'message' => 'bail|required','titre' => 'bail|required' ]);
+
+        #2. Récupération des utilisateurs
+        $personnes = Personne::all();
+
+        #3. Envoi du mail
+        foreach ($personnes as $personne){
+            Mail::to($personne)->queue(new MessageGoogle($request->all()));
+        }
+
+        return back()->withText("Message envoyé");
+    }
+
+}
+
+
+
+
+
+
+Résumons tout. Pour envoyer un mail dans un projet Laravel en utilisant le serveur SMTP Google, nous avons :
+
+    1 - Créé le mot de passe d’application Google pour le compte @gmail
+    2 - Renseigné les informations de configuration SMTP au fichier .env du projet Laravel
+    3 - Créé la classe Mailable pour configurer le mail à envoyer
+    4 - Créé la route « message » (GET) pour présenter le formulaire où saisir le message à envoyer
+    5 - Créé la route « message » (POST) pour envoyer le message
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

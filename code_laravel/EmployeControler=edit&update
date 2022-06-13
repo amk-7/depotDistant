@@ -1,0 +1,63 @@
+public function edit(Employe $employe)
+    {
+        $personne = $employe->personne();
+        //dd($personne);
+        $roles = Role::all()->pluck('name', 'id');
+        $employe->load('roles');
+        return view('employes.edit', compact('employe','personne', 'roles'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Employe  $employe
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(Request $request, Employe $employe)
+    {
+        $personne = Personne::find($employe->id_personne);
+        // 1. La validation
+        // Les règles de validation pour "title" et "content"
+        $rules = [
+            'nom' => 'bail|required|max:64|min:3',
+        ];
+        // Si une nouvelle image est envoyée, On ajoute la règle de validation pour "avatar"
+        if ($request->avatar) { $rules["avatar"] = 'bail|required|image|max:1024'; }
+        // Si le nom d'utilisateur a changé
+        if ($employe->nomUtilisateur != $request->nomUtilisateur) {
+            $rules["nomUtilisateur"] = 'bail|unique:employes|min:3';
+        }
+        if ($personne->email != $request->email) {
+            $rules["email"] = 'bail|required|unique:personnes|email';
+        }
+
+        $this->validate($request, $rules);
+
+        // 2. On upload l'image dans "/storage/app/public/profils"
+        if ($request->avatar) {
+            //On supprime l'ancienne image
+            Storage::delete($employe->avatar);
+            $image = $request->file('avatar');
+            $chemin_image = $image->storeAs('profils', $request->nomUtilisateur.'.'.$image->extension());
+        }
+
+        $request['adresse'] = array("ville"=>$request->ville,
+            "quartier"=>$request->quartier,"rue"=>$request->rue, "BP"=>$request->bp) ;
+
+        // 3. On met à jour les informations de l'employe
+        $request['avatar'] = isset($chemin_image) ? $chemin_image : $employe->avatar ;
+        //$personne = Personne::find($employe->id_personne);
+        if($personne){
+            // il faudrait déjà verifier les champs avec des validateurs
+            //$personne->update($request->all());
+            $personne->update($request->only('nom', 'prenom','dateNaiss', 'adresse', 'email' ,'telephone'));
+           // $personne->fill($request->all())->save();
+        }
+        if($request->password){
+            $employe->update($request->only('nomUtilisateur', 'password', 'avatar'));
+        }else{
+            $employe->update($request->only('nomUtilisateur', 'avatar'));
+        }
+            return redirect()->route('employes');
+    }
